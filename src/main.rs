@@ -58,8 +58,14 @@ fn grab_visible(x: &xws::X, wins: &[xws::Win]) {
 /// Grab every window by showing each in turn, then put the original
 /// back. The external flickers through the set once; that is what the
 /// key is for, and why it is a key rather than a timer.
-fn scan_all(x: &xws::X, wins: &[xws::Win]) {
-    let shown: Vec<u32> = wins.iter().filter(|w| w.active).map(|w| w.xid).collect();
+/// Flip through every window grabbing thumbnails, then put the original
+/// back. Refuses when no window is viewable (workspace off-screen): grabs
+/// would fail AND beaming would silently change which tab shows next time
+/// the workspace comes on-screen. Returns false on that refusal.
+fn scan_all(x: &xws::X, wins: &[xws::Win]) -> bool {
+    let Some(orig) = wins.iter().find(|w| w.active).map(|w| w.xid) else {
+        return false;
+    };
     for w in wins {
         if !x.beam(w.xid) {
             continue;
@@ -67,9 +73,8 @@ fn scan_all(x: &xws::X, wins: &[xws::Win]) {
         std::thread::sleep(std::time::Duration::from_millis(350));
         let _ = x.grab_ppm(w.xid, &thumb_path(w.xid), THUMB_PX);
     }
-    if let Some(orig) = shown.first() {
-        let _ = x.beam(*orig);
-    }
+    let _ = x.beam(orig);
+    true
 }
 
 fn main() {
@@ -147,9 +152,10 @@ fn main() {
             Some("S") => {
                 flash = "scanning…".into();
                 draw(&mut disp, cols, rows, ws, &wins, sel, &flash);
-                scan_all(&x, &wins);
+                let ok = scan_all(&x, &wins);
                 wins = x.windows_on(ws);
-                flash = "scanned".into();
+                flash = if ok { "scanned".into() }
+                        else { "workspace not on screen — scan skipped".into() };
                 disp.clear_all();
             }
             Some("ENTER") => {
