@@ -56,12 +56,10 @@ fn grab_visible(x: &xws::X, wins: &[xws::Win]) {
 }
 
 /// Grab every window by showing each in turn, then put the original
-/// back. The external flickers through the set once; that is what the
-/// key is for, and why it is a key rather than a timer.
-/// Flip through every window grabbing thumbnails, then put the original
-/// back. Refuses when no window is viewable (workspace off-screen): grabs
-/// would fail AND beaming would silently change which tab shows next time
-/// the workspace comes on-screen. Returns false on that refusal.
+/// back. The external flickers through the set once; that is why this is
+/// a key, not a timer. Refuses when no window is viewable (workspace
+/// off-screen): grabs would fail, and beaming would silently change which
+/// tab shows when the workspace returns. Returns false on that refusal.
 fn scan_all(x: &xws::X, wins: &[xws::Win]) -> bool {
     let Some(orig) = wins.iter().find(|w| w.active).map(|w| w.xid) else {
         return false;
