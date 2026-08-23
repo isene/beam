@@ -88,19 +88,55 @@ impl X {
         ).is_ok();
         ok && self.conn.flush().is_ok()
     }
-
-    /// Move a window to `ws` by sending it Mod-free: set _NET_WM_DESKTOP.
-    /// tile tracks the property change on its next map; for a live move
-    /// the WM would need the _NET_WM_DESKTOP ClientMessage, which tile
-    /// does not speak yet, so this is best-effort.
-    pub fn current_desktop(&self) -> Option<u32> {
-        let atom = intern(&self.conn, b"_NET_CURRENT_DESKTOP")?;
-        let r = self.conn.get_property(
-            false, self.root, atom, AtomEnum::CARDINAL, 0, 1).ok()?.reply().ok()?;
-        if r.format == 32 { r.value32().and_then(|mut v| v.next()) } else { None }
-    }
 }
 
 fn intern(conn: &RustConnection, name: &[u8]) -> Option<Atom> {
     Some(conn.intern_atom(false, name).ok()?.reply().ok()?.atom)
+}
+
+impl X {
+    /// Window geometry in pixels.
+    pub fn geometry(&self, xid: Window) -> Option<(u16, u16)> {
+        let g = self.conn.get_geometry(xid).ok()?.reply().ok()?;
+        Some((g.width, g.height))
+    }
+
+    /// Grab the window's pixels and write a thumbnail as PPM (P6), which
+    /// every image path downstream understands. Only works while the
+    /// window is viewable: X keeps no pixels for an unmapped tab, which
+    /// is why the scan key exists. Downscaled by integer box-sampling to
+    /// at most `max_w` pixels wide.
+    pub fn grab_ppm(&self, xid: Window, path: &std::path::Path, max_w: u32) -> bool {
+        let Some((w, h)) = self.geometry(xid) else { return false };
+        if w == 0 || h == 0 {
+            return false;
+        }
+        let img = self.conn.get_image(
+            x11rb::protocol::xproto::ImageFormat::Z_PIXMAP,
+            xid, 0, 0, w, h, !0,
+        );
+        let Ok(img) = img else { return false };
+        let Ok(img) = img.reply() else { return false };
+        if img.depth < 24 {
+            return false;
+        }
+        let (w, h) = (w as u32, h as u32);
+        let data = &img.data; // BGRX rows, 4 bytes per pixel
+        if (data.len() as u32) < w * h * 4 {
+            return false;
+        }
+        let step = (w / max_w).max(1);
+        let (tw, th) = (w / step, h / step);
+        let mut out = Vec::with_capacity((tw * th * 3) as usize + 32);
+        out.extend_from_slice(format!("P6\n{} {}\n255\n", tw, th).as_bytes());
+        for y in 0..th {
+            for x in 0..tw {
+                let i = (((y * step) * w + (x * step)) * 4) as usize;
+                out.push(data[i + 2]);
+                out.push(data[i + 1]);
+                out.push(data[i]);
+            }
+        }
+        std::fs::write(path, out).is_ok()
+    }
 }

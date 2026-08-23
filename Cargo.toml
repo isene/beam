@@ -1,6 +1,6 @@
 [package]
 name = "beam"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Geir Isene <g@isene.com>"]
 description = "Remote control for the presentation workspace. Part of the Fe2O3 suite."
@@ -9,6 +9,7 @@ repository = "https://github.com/isene/beam"
 
 [dependencies]
 crust = { version = "0.1", path = "../crust", package = "fe2o3-crust" }
+glow = { version = "0.1", path = "../glow", package = "fe2o3-glow" }
 x11rb = { version = "0.13", default-features = false }
 
 [profile.release]

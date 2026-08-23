@@ -22,8 +22,17 @@ beam --list         # windows on the workspace, tab-separated
 beam --show 12345   # show that window, no TUI
 ```
 
-In the TUI: `↑↓` select, `Enter` show it, `r` refresh, `q` quit.
-The green dot marks the window currently visible.
+The TUI is a grid of thumbnails, one per window, labels underneath.
+`←→↑↓` select, `Enter` shows it, `q` quits. The green dot marks the
+window currently visible.
+
+Thumbnails are grabbed from the windows' own pixels, and only on your
+say-so: on start and `r` for whatever is visible, and `S` to scan the
+lot — beam flips through every tab once, grabs each, and puts the
+original back. The external flickers through the set for a second,
+which is why scanning is a key and not a timer. X keeps no pixels for
+an unmapped tab, so a window never yet shown has no picture until the
+first scan.
 
 ## How it works
 
