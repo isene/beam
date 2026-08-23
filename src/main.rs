@@ -155,7 +155,7 @@ fn main() {
                 let ok = scan_all(&x, &wins);
                 wins = x.windows_on(ws);
                 flash = if ok { "scanned".into() }
-                        else { "workspace not on screen — scan skipped".into() };
+                        else { "workspace not on screen, scan skipped".into() };
                 disp.clear_all();
             }
             Some("ENTER") => {
