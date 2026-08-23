@@ -1,0 +1,18 @@
+[package]
+name = "beam"
+version = "0.1.0"
+edition = "2021"
+authors = ["Geir Isene <g@isene.com>"]
+description = "Remote control for the presentation workspace. Part of the Fe2O3 suite."
+license = "Unlicense"
+repository = "https://github.com/isene/beam"
+
+[dependencies]
+crust = { version = "0.1", path = "../crust", package = "fe2o3-crust" }
+x11rb = { version = "0.13", default-features = false }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"
