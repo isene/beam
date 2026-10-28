@@ -6,10 +6,11 @@
 //! typed on and the keyboard focus never change. Fe2O3 suite: crust for
 //! the TUI, glow for the pictures.
 //!
-//! Battery posture: fully event-driven. beam blocks on stdin between
-//! keys and talks to X only when told to. Thumbnails are grabbed on
-//! start, on r (the visible one) and on S (all of them, by flipping
-//! tabs); never on a timer.
+//! Battery posture: event-driven. beam blocks on stdin between keys and
+//! talks to X only when told to. Thumbnails are grabbed on start, on r
+//! (the visible one) and on S (all of them, by flipping tabs). The one
+//! timer is R: while it is on, the visible one is grabbed every 2 s, and
+//! the screen is drawn again only when the picture or the windows changed.
 
 mod xws;
 
@@ -48,11 +49,13 @@ fn thumb_path(xid: u32) -> PathBuf {
 }
 
 /// Grab what can be grabbed without disturbing anything: the windows
-/// that are viewable right now.
-fn grab_visible(x: &xws::X, wins: &[xws::Win]) {
+/// that are viewable right now. True when a picture changed.
+fn grab_visible(x: &xws::X, wins: &[xws::Win]) -> bool {
+    let mut changed = false;
     for w in wins.iter().filter(|w| w.active) {
-        let _ = x.grab_ppm(w.xid, &thumb_path(w.xid), THUMB_PX);
+        changed |= x.grab_ppm(w.xid, &thumb_path(w.xid), THUMB_PX);
     }
+    changed
 }
 
 /// Grab every window by showing each in turn, then put the original
@@ -83,6 +86,7 @@ fn main() {
         println!();
         println!("  Enter    show the selected window on that workspace");
         println!("  r        re-grab the visible window's thumbnail");
+        println!("  R        live: re-grab it every 2 s, until R again");
         println!("  S        scan: flip through every window once, grabbing each");
         println!("  q        quit");
         return;
@@ -122,9 +126,15 @@ fn main() {
     let mut wins = x.windows_on(ws);
     grab_visible(&x, &wins);
     let mut flash = String::new();
+    let mut live = false;
+    let mut dirty = true;
     loop {
-        draw(&mut disp, cols, rows, ws, &wins, sel, &flash);
-        let key = Input::getchr(None); // block: no tick, no wakeups
+        if dirty {
+            draw(&mut disp, cols, rows, ws, &wins, sel, &flash, live);
+        }
+        dirty = true;
+        // Blocks between keys; only R wakes it, every 2 s.
+        let key = Input::getchr(live.then_some(2));
         flash.clear();
         let per_row = grid_cols(cols);
         match key.as_deref() {
@@ -141,6 +151,21 @@ fn main() {
                     sel += per_row;
                 }
             }
+            None if live => {
+                let now = x.windows_on(ws);
+                dirty = grab_visible(&x, &now);
+                if now != wins {
+                    disp.clear_all();
+                    dirty = true;
+                }
+                wins = now;
+                sel = sel.min(wins.len().saturating_sub(1));
+            }
+            Some("R") => {
+                live = !live;
+                flash = if live { "live: the shown window every 2 s, R stops".into() }
+                        else { "live off".into() };
+            }
             Some("r") => {
                 wins = x.windows_on(ws);
                 grab_visible(&x, &wins);
@@ -149,7 +174,7 @@ fn main() {
             }
             Some("S") => {
                 flash = "scanning…".into();
-                draw(&mut disp, cols, rows, ws, &wins, sel, &flash);
+                draw(&mut disp, cols, rows, ws, &wins, sel, &flash, live);
                 let ok = scan_all(&x, &wins);
                 wins = x.windows_on(ws);
                 flash = if ok { "scanned".into() }
@@ -187,14 +212,16 @@ fn grid_cols(cols: u16) -> usize {
     ((cols.saturating_sub(2)) / CELL_W).max(1) as usize
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw(disp: &mut glow::Display, cols: u16, rows: u16, ws: u32,
-        wins: &[xws::Win], sel: usize, flash: &str) {
+        wins: &[xws::Win], sel: usize, flash: &str, live: bool) {
     let mut pane = Pane::new(1, 1, cols, rows, 250, 0);
     let per_row = grid_cols(cols);
     let mut out = String::new();
     out.push_str(&style::styled(
-        &format!(" beam — workspace {}  ·  {} window{} ",
-                 ws + 1, wins.len(), if wins.len() == 1 { "" } else { "s" }),
+        &format!(" beam — workspace {}  ·  {} window{}{} ",
+                 ws + 1, wins.len(), if wins.len() == 1 { "" } else { "s" },
+                 if live { "  ·  live" } else { "" }),
         Some(231), Some(234), "b"));
     out.push('\n');
     pane.set_text(&out);
@@ -243,7 +270,7 @@ fn draw(disp: &mut glow::Display, cols: u16, rows: u16, ws: u32,
 
     let mut foot = Pane::new(1, rows, cols, 1, 244, 236);
     if flash.is_empty() {
-        foot.set_text(" ←→↑↓ select · Enter show it · r regrab · S scan all · q quit");
+        foot.set_text(" ←→↑↓ select · Enter show it · r regrab · R live · S scan all · q quit");
     } else {
         foot.set_text(&style::fg(&format!(" {}", flash), 220));
     }

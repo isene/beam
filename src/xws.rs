@@ -16,6 +16,7 @@ pub struct X {
     atom_name: Atom,
 }
 
+#[derive(PartialEq)]
 pub struct Win {
     pub xid: Window,
     pub class: String,
@@ -102,7 +103,9 @@ impl X {
     }
 
     /// Grab the window's pixels and write a thumbnail as PPM (P6), which
-    /// every image path downstream understands. Only works while the
+    /// every image path downstream understands. True when the file now
+    /// holds a new picture; the same picture is not written again, so
+    /// its picture stays cached in glow. Only works while the
     /// window is viewable: X keeps no pixels for an unmapped tab, which
     /// is why the scan key exists. Downscaled by integer box-sampling to
     /// at most `max_w` pixels wide.
@@ -111,31 +114,32 @@ impl X {
         if w == 0 || h == 0 {
             return false;
         }
-        let img = self.conn.get_image(
-            x11rb::protocol::xproto::ImageFormat::Z_PIXMAP,
-            xid, 0, 0, w, h, !0,
-        );
-        let Ok(img) = img else { return false };
-        let Ok(img) = img.reply() else { return false };
-        if img.depth < 24 {
-            return false;
-        }
         let (w, h) = (w as u32, h as u32);
-        let data = &img.data; // BGRX rows, 4 bytes per pixel
-        if (data.len() as u32) < w * h * 4 {
-            return false;
-        }
         let step = (w / max_w).max(1);
         let (tw, th) = (w / step, h / step);
+        // Only every step-th row is kept, so only those rows are asked
+        // for, all of them before the first reply is read.
+        let rows: Vec<_> = (0..th)
+            .map(|y| self.conn.get_image(
+                x11rb::protocol::xproto::ImageFormat::Z_PIXMAP,
+                xid, 0, (y * step) as i16, w as u16, 1, !0))
+            .collect();
         let mut out = Vec::with_capacity((tw * th * 3) as usize + 32);
         out.extend_from_slice(format!("P6\n{} {}\n255\n", tw, th).as_bytes());
-        for y in 0..th {
-            for x in 0..tw {
-                let i = (((y * step) * w + (x * step)) * 4) as usize;
-                out.push(data[i + 2]);
-                out.push(data[i + 1]);
-                out.push(data[i]);
+        for row in rows {
+            let Ok(row) = row else { return false };
+            let Ok(row) = row.reply() else { return false };
+            let data = &row.data; // BGRX, 4 bytes per pixel
+            if row.depth < 24 || (data.len() as u32) < w * 4 {
+                return false;
             }
+            for x in 0..tw {
+                let i = (x * step * 4) as usize;
+                out.extend_from_slice(&[data[i + 2], data[i + 1], data[i]]);
+            }
+        }
+        if std::fs::read(path).is_ok_and(|old| old == out) {
+            return false;
         }
         std::fs::write(path, out).is_ok()
     }

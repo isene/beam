@@ -34,6 +34,10 @@ which is why scanning is a key and not a timer. X keeps no pixels for
 an unmapped tab, so a window never yet shown has no picture until the
 first scan.
 
+`R` turns on live mode: the visible window is grabbed every 2 s, and
+the grid is drawn again only when its picture changed. `R` again turns
+it off.
+
 ## How it works
 
 beam sends the EWMH `_NET_ACTIVE_WINDOW` ClientMessage. The
@@ -42,8 +46,8 @@ its own workspace: on screen it swaps in place, off screen it is
 recorded for the next visit. A cross-workspace raise restores the
 keyboard focus, so driving the external cannot steal your typing.
 
-Fully event-driven: beam blocks on your keys and asks X only when it
-redraws. No tick, no polling.
+Event-driven: beam blocks on your keys and asks X only when it
+redraws. The one tick is live mode, and only while `R` has it on.
 
 ## Install
 
