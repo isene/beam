@@ -270,7 +270,7 @@ fn draw(disp: &mut glow::Display, cols: u16, rows: u16, ws: u32,
 
     let mut foot = Pane::new(1, rows, cols, 1, 244, 236);
     if flash.is_empty() {
-        foot.set_text(" ←→↑↓ select · Enter show it · r regrab · R live · S scan all · q quit");
+        foot.set_text(&crust::with_version(" ←→↑↓ select · Enter show it · r regrab · R live · S scan all · q quit", cols as usize, "beam", env!("CARGO_PKG_VERSION")));
     } else {
         foot.set_text(&style::fg(&format!(" {}", flash), 220));
     }
